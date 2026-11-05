@@ -30,7 +30,10 @@ and returns no data.
 - `MCP_BEARER_TOKEN` — the token HighLevel stores for the custom MCP connection.
 - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — platform data reads (PostgREST,
   service key, read-only usage).
-- `DATA_ADAPTER` — `supabase` (default) or `snapshot` (offline tests only).
+- `DATA_ADAPTER` — `platform` (production: reads the platform app's
+  /api/assistant/mcp-data endpoint), `supabase`, or `snapshot` (offline tests
+  only). Platform mode needs `ASSISTANT_API_SECRET` and optionally
+  `PLATFORM_BASE_URL` (default https://app.mathwhizacademy.com).
 
 ## Run
 

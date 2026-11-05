@@ -1,9 +1,16 @@
 'use strict';
 // Data layer for the Mathwhiz MCP server.
 //
-// Two adapters produce the same normalized dataset:
-//   - "supabase": live reads from the platform's Supabase project via PostgREST
-//     using the service key (server-side only, bypasses RLS; read-only usage).
+// Three adapters produce the same normalized dataset:
+//   - "platform": live reads from the platform app's internal assistant API
+//     (POST /api/assistant/mcp-data on the platform), authenticated with the
+//     shared assistant secret. The endpoint reads server-side with the
+//     platform's own admin client, fenced to the Caribbean campus. This is
+//     the production adapter: the platform runs on Lovable Cloud, whose
+//     managed Supabase exposes no service key to copy out.
+//   - "supabase": live reads from a Supabase project via PostgREST using the
+//     service key (server-side only, bypasses RLS; read-only usage). Kept
+//     for environments where a direct project key exists.
 //   - "snapshot": a local JSON fixture, used only for offline verification.
 //
 // Normalized dataset:
@@ -89,6 +96,45 @@ async function loadFromSupabase() {
     fetchAll(baseUrl, serviceKey, 'finance_protected_students?select=student_id'),
   ]);
 
+  return normalize({
+    cohortRows, programRows, pglRows, gradeRows, enrollmentRows,
+    studentRows, guardianRows, relRows, protectedRows,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Platform assistant API adapter (production)
+// ---------------------------------------------------------------------------
+
+async function loadFromPlatform() {
+  const baseUrl = (process.env.PLATFORM_BASE_URL || 'https://app.mathwhizacademy.com').replace(/\/$/, '');
+  const secret = process.env.ASSISTANT_API_SECRET || '';
+  if (!secret) throw new Error('ASSISTANT_API_SECRET must be set');
+  const res = await fetch(`${baseUrl}/api/assistant/mcp-data`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-mathwhiz-assistant-secret': secret },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`Platform data read failed: HTTP ${res.status}`);
+  const d = await res.json();
+  if (!d || d.ok !== true) throw new Error('Platform data read failed: unexpected response');
+  return normalize({
+    cohortRows: d.cohorts || [],
+    programRows: d.programs || [],
+    pglRows: d.program_grade_levels || [],
+    gradeRows: d.grade_levels || [],
+    enrollmentRows: d.enrollments || [],
+    studentRows: d.students || [],
+    guardianRows: d.guardians || [],
+    relRows: d.guardian_student_relationships || [],
+    protectedRows: d.finance_protected_students || [],
+  });
+}
+
+function normalize(raw) {
+  const { cohortRows, programRows, pglRows, gradeRows, enrollmentRows,
+    studentRows, guardianRows, relRows, protectedRows } = raw;
+
   const gradeByLevelId = new Map(gradeRows.map((g) => [g.id, gradeFromCode(g.code)]));
   const campusByProgram = new Map(programRows.map((p) => [p.id, p.campus_id]));
   // program -> grade: prefer the grade_levels row on the program's own campus
@@ -149,7 +195,7 @@ function loadFromSnapshot() {
   const fx = JSON.parse(fs.readFileSync(file, 'utf8'));
 
   const cohorts = (fx.cohorts || [])
-    .filter((c) => c.status === 'Active')
+    .filter((c) => c.status === 'Active' || c.status === 'Draft')
     .map((c) => ({
       id: c.id,
       name: c.name,
@@ -198,7 +244,11 @@ async function loadData() {
   const now = Date.now();
   if (cache && now - cacheAt < CACHE_MS) return cache;
   const adapter = (process.env.DATA_ADAPTER || 'supabase').toLowerCase();
-  cache = adapter === 'snapshot' ? loadFromSnapshot() : await loadFromSupabase();
+  cache = adapter === 'snapshot'
+    ? loadFromSnapshot()
+    : adapter === 'platform'
+      ? await loadFromPlatform()
+      : await loadFromSupabase();
   cacheAt = now;
   return cache;
 }

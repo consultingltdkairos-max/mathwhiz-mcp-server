@@ -36,11 +36,16 @@ function bandLetter(cohortName) {
 
 function salesClasses(data, grade) {
   // Weekday placement classes only: Sunday sessions and the demo class are
-  // not placement classes (matches the Nov 3 capacity-check method).
+  // not placement classes (matches the Nov 3 capacity-check method). Only
+  // the M/A/T/H band classes count: the W band stays manual under the fill
+  // rule, and other Draft cohorts on the platform (booster or extra-band
+  // classes such as B3, I, Z) are not placement classes either.
   return data.cohorts.filter(
     (c) => c.grade === grade
       && (c.dayPair === 'monday_wednesday' || c.dayPair === 'tuesday_thursday')
-      && !/demo/i.test(c.name),
+      && !/demo/i.test(c.name)
+      && bandLetter(c.name) !== null
+      && 'MATH'.includes(bandLetter(c.name)),
   );
 }
 
