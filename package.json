@@ -1,0 +1,1 @@
+{"description":"Read-only MCP server for Mathwhiz Academy Conversation AI (class availability, child status, class times).","engines":{"node":">=18"},"name":"mathwhiz-mcp-server","private":true,"scripts":{"start":"node src/index.js"},"type":"commonjs","version":"1.0.0"}
